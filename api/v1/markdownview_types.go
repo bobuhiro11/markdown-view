@@ -46,10 +46,14 @@ type MarkdownViewSpec struct {
 }
 
 // MarkdownViewStatus defines the observed state of MarkdownView
-type MarkdownViewStatus struct {
-	// INSERT ADDITIONAL STATUS FIELD - define observed state of cluster
-	// Important: Run "make" to regenerate code after modifying this file
-}
+// +kubebuilder:validation:Enum=NotReady;Available;Healthy
+type MarkdownViewStatus string
+
+const (
+	MarkdownViewNotReady  = MarkdownViewStatus("NotReady")
+	MarkdownViewAvailable = MarkdownViewStatus("Available")
+	MarkdownViewHealthy   = MarkdownViewStatus("Healthy")
+)
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
