@@ -18,13 +18,18 @@ package controller
 
 import (
 	"context"
+	"fmt"
 
+	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	viewv1 "github.com/bobuhiro11/markdown-view/api/v1"
+	appsv1 "k8s.io/api/apps/v1"
 )
 
 // MarkdownViewReconciler reconciles a MarkdownView object
@@ -56,6 +61,59 @@ func (r *MarkdownViewReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	_ = log.FromContext(ctx)
 
 	// TODO(user): your logic here
+
+RETRY:
+	res, err := r.Reconcile_get(ctx, req)
+	if apierrors.IsNotFound(err) {
+		goto RETRY
+	}
+
+	if err != nil {
+		return res, err
+	}
+
+	res, err = r.Reconcile_list(ctx, req)
+	if err != nil {
+		return res, err
+	}
+
+	return ctrl.Result{}, nil
+}
+
+func (r *MarkdownViewReconciler) Reconcile_get(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	var deployment appsv1.Deployment
+
+	err := r.Get(
+		ctx,
+		client.ObjectKey{Namespace: "default", Name: "sample"},
+		&deployment,
+	)
+
+	if err != nil {
+		_ = fmt.Errorf("Failed to get deployment: #%v", err)
+		return ctrl.Result{}, err
+	}
+
+	fmt.Printf("Got Deployment: %#v\n", deployment)
+	return ctrl.Result{}, nil
+}
+
+func (r *MarkdownViewReconciler) Reconcile_list(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	var services corev1.ServiceList
+	err := r.List(ctx, &services, &client.ListOptions{
+		Namespace:     "default",
+		LabelSelector: labels.SelectorFromSet(map[string]string{"app": "sample"}),
+	})
+
+	if err != nil {
+		_ = fmt.Errorf("Failed to list deployment: #%v", err)
+		return ctrl.Result{}, err
+	}
+
+	fmt.Printf("List deployments:")
+	for _, svc := range services.Items {
+		fmt.Println(svc.Name)
+	}
 
 	return ctrl.Result{}, nil
 }
