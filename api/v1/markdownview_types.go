@@ -57,6 +57,8 @@ const (
 
 //+kubebuilder:object:root=true
 //+kubebuilder:subresource:status
+//+kubebuilder:printcolumn:name="REPLICAS",type="integer",JSONPath=".spec.replicas"
+//+kubebuilder:printcolumn:name="STATUS",type="string",JSONPath=".status"
 
 // MarkdownView is the Schema for the markdownviews API
 type MarkdownView struct {

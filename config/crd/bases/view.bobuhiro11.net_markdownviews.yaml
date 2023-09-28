@@ -14,7 +14,14 @@ spec:
     singular: markdownview
   scope: Namespaced
   versions:
-  - name: v1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.replicas
+      name: REPLICAS
+      type: integer
+    - jsonPath: .status
+      name: STATUS
+      type: string
+    name: v1
     schema:
       openAPIV3Schema:
         description: MarkdownView is the Schema for the markdownviews API
