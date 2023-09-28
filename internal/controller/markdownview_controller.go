@@ -77,6 +77,11 @@ RETRY:
 		return res, err
 	}
 
+	res, err = r.Reconcile_pagination(ctx, req)
+	if err != nil {
+		return res, err
+	}
+
 	return ctrl.Result{}, nil
 }
 
@@ -90,7 +95,7 @@ func (r *MarkdownViewReconciler) Reconcile_get(ctx context.Context, req ctrl.Req
 	)
 
 	if err != nil {
-		_ = fmt.Errorf("Failed to get deployment: #%v", err)
+		_ = fmt.Errorf("Failed to get deployment: #%v\n", err)
 		return ctrl.Result{}, err
 	}
 
@@ -106,16 +111,43 @@ func (r *MarkdownViewReconciler) Reconcile_list(ctx context.Context, req ctrl.Re
 	})
 
 	if err != nil {
-		_ = fmt.Errorf("Failed to list deployment: #%v", err)
+		_ = fmt.Errorf("Failed to list deployment: #%v\n", err)
 		return ctrl.Result{}, err
 	}
 
-	fmt.Printf("List deployments:")
+	fmt.Printf("List deployments:\n")
 	for _, svc := range services.Items {
 		fmt.Println(svc.Name)
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *MarkdownViewReconciler) Reconcile_pagination(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	var services corev1.ServiceList
+	token := ""
+
+	for i := 0; ; i++ {
+		err := r.List(ctx, &services, &client.ListOptions{
+			Limit:    3,
+			Continue: token,
+		})
+
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+
+		fmt.Printf("Page %d:\n", i)
+		for _, svc := range services.Items {
+			fmt.Println(svc.Name)
+		}
+		fmt.Println()
+
+		token = services.ListMeta.Continue
+		if len(token) == 0 {
+			return ctrl.Result{}, nil
+		}
+	}
 }
 
 // SetupWithManager sets up the controller with the Manager.
