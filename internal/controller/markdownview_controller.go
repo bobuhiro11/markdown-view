@@ -21,11 +21,17 @@ import (
 	"fmt"
 
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/intstr"
+	applyappsv1 "k8s.io/client-go/applyconfigurations/apps/v1"
+	applycorev1 "k8s.io/client-go/applyconfigurations/core/v1"
+	applymetav1 "k8s.io/client-go/applyconfigurations/meta/v1"
 	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -91,6 +97,21 @@ RETRY:
 	}
 
 	res, err = r.Reconcile_pagination(ctx, req)
+	if err != nil {
+		return res, err
+	}
+
+	res, err = r.Reconcile_patchMerge(ctx, req)
+	if err != nil {
+		return res, err
+	}
+
+	res, err = r.Reconcile_patchApply(ctx, req)
+	if err != nil {
+		return res, err
+	}
+
+	res, err = r.Reconcile_patchApplyConfig(ctx, req)
 	if err != nil {
 		return res, err
 	}
@@ -225,6 +246,112 @@ func (r *MarkdownViewReconciler) Reconcile_createOrUpdate(ctx context.Context, r
 	}
 
 	return ctrl.Result{}, nil
+}
+
+func (r *MarkdownViewReconciler) Reconcile_patchMerge(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	// Before
+	var dep appsv1.Deployment
+	err := r.Get(ctx, client.ObjectKey{Namespace: "default", Name: "sample"}, &dep)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	patch := client.MergeFrom(&dep)
+
+	// After
+	newDep := dep.DeepCopy()
+	newDep.Spec.Replicas = pointer.Int32(3)
+
+	err = r.Patch(ctx, newDep, patch)
+
+	return ctrl.Result{}, err
+}
+
+func (r *MarkdownViewReconciler) Reconcile_patchApply(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	patch := &unstructured.Unstructured{}
+	patch.SetGroupVersionKind(schema.GroupVersionKind{
+		Group:   "apps",
+		Version: "v1",
+		Kind:    "Deployment",
+	})
+	patch.SetNamespace("default")
+	patch.SetName("sample2")
+	patch.UnstructuredContent()["spec"] = map[string]interface{}{
+		"replicas": 2,
+		"selector": map[string]interface{}{
+			"matchLabels": map[string]string{
+				"app": "nginx",
+			},
+		},
+		"template": map[string]interface{}{
+			"metadata": map[string]interface{}{
+				"labels": map[string]string{
+					"app": "nginx",
+				},
+			},
+			"spec": map[string]interface{}{
+				"containers": []interface{}{
+					map[string]interface{}{
+						"name":  "nginx",
+						"image": "nginx:latest",
+					},
+				},
+			},
+		},
+	}
+
+	err := r.Patch(ctx, patch, client.Apply, &client.PatchOptions{
+		FieldManager: "client-sample",
+		Force:        pointer.Bool(true),
+	})
+
+	return ctrl.Result{}, err
+}
+
+func (r *MarkdownViewReconciler) Reconcile_patchApplyConfig(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	dep := applyappsv1.Deployment("sample3", "default").
+		WithSpec(applyappsv1.DeploymentSpec().
+			WithReplicas(3).
+			WithSelector(applymetav1.LabelSelector().WithMatchLabels(map[string]string{"app": "nginx"})).
+			WithTemplate(applycorev1.PodTemplateSpec().
+				WithLabels(map[string]string{"app": "nginx"}).
+				WithSpec(applycorev1.PodSpec().
+					WithContainers(applycorev1.Container().
+						WithName("nginx").
+						WithImage("nginx:latest"),
+					),
+				),
+			),
+		)
+
+	obj, err := runtime.DefaultUnstructuredConverter.ToUnstructured(dep)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	patch := &unstructured.Unstructured{
+		Object: obj,
+	}
+
+	var current appsv1.Deployment
+	err = r.Get(ctx, client.ObjectKey{Namespace: "default", Name: "sample3"}, &current)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return ctrl.Result{}, err
+	}
+
+	currApplyConfig, err := applyappsv1.ExtractDeployment(&current, "client-sample")
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if equality.Semantic.DeepEqual(dep, currApplyConfig) {
+		return ctrl.Result{}, nil
+	}
+
+	err = r.Patch(ctx, patch, client.Apply, &client.PatchOptions{
+		FieldManager: "client-sample",
+		Force:        pointer.Bool(true),
+	})
+	return ctrl.Result{}, err
 }
 
 // SetupWithManager sets up the controller with the Manager.
