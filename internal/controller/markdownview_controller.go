@@ -25,9 +25,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/utils/pointer"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 
 	viewv1 "github.com/bobuhiro11/markdown-view/api/v1"
@@ -63,9 +65,18 @@ func (r *MarkdownViewReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	_ = log.FromContext(ctx)
 
 	// TODO(user): your logic here
+	res, err := r.Reconcile_create(ctx, req)
+	if err != nil && !apierrors.IsAlreadyExists(err) {
+		return res, err
+	}
+
+	res, err = r.Reconcile_createOrUpdate(ctx, req)
+	if err != nil {
+		return res, err
+	}
 
 RETRY:
-	res, err := r.Reconcile_get(ctx, req)
+	res, err = r.Reconcile_get(ctx, req)
 	if apierrors.IsNotFound(err) {
 		goto RETRY
 	}
@@ -183,6 +194,36 @@ func (r *MarkdownViewReconciler) Reconcile_create(ctx context.Context, req ctrl.
 	if err != nil {
 		return ctrl.Result{}, err
 	}
+	return ctrl.Result{}, nil
+}
+
+func (r *MarkdownViewReconciler) Reconcile_createOrUpdate(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
+	svc := &corev1.Service{}
+	svc.SetNamespace("default")
+	svc.SetName("sample")
+
+	op, err := ctrl.CreateOrUpdate(ctx, r.Client, svc, func() error {
+		svc.Spec.Type = corev1.ServiceTypeClusterIP
+		svc.Spec.Selector = map[string]string{"app": "nginx"}
+		svc.Spec.Ports = []corev1.ServicePort{
+			{
+				Name:       "http",
+				Protocol:   corev1.ProtocolTCP,
+				Port:       80,
+				TargetPort: intstr.FromInt(80),
+			},
+		}
+		return nil
+	})
+
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+
+	if op != controllerutil.OperationResultNone {
+		fmt.Printf("Executed CreateOrUpdate. Deployment: %s\n", op)
+	}
+
 	return ctrl.Result{}, nil
 }
 
