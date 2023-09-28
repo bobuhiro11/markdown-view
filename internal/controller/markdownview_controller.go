@@ -22,6 +22,7 @@ import (
 
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
+	"k8s.io/apimachinery/pkg/api/errors"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -68,63 +69,41 @@ type MarkdownViewReconciler struct {
 // For more details, check Reconcile and its Result here:
 // - https://pkg.go.dev/sigs.k8s.io/controller-runtime@v0.15.0/pkg/reconcile
 func (r *MarkdownViewReconciler) Reconcile(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	_ = log.FromContext(ctx)
+	logger := log.FromContext(ctx)
 
-	res, err := r.Reconcile_create(ctx, req)
-	if err != nil && !apierrors.IsAlreadyExists(err) {
-		return res, err
+	var mdView viewv1.MarkdownView
+
+	// If the CR is not found, there is nothing to do here.
+	err := r.Get(ctx, req.NamespacedName, &mdView)
+	if errors.IsNotFound(err) {
+		return ctrl.Result{}, nil
 	}
 
-	res, err = r.Reconcile_createOrUpdate(ctx, req)
 	if err != nil {
-		return res, err
+		logger.Error(err, "unable to get MarkdownView", "name", req.NamespacedName)
+		return ctrl.Result{}, err
 	}
 
-RETRY:
-	res, err = r.Reconcile_get(ctx, req)
-	if apierrors.IsNotFound(err) {
-		goto RETRY
+	// The CR is under deletion. So there is nothing to do here.
+	if !mdView.ObjectMeta.DeletionTimestamp.IsZero() {
+		return ctrl.Result{}, nil
 	}
+
+	// Create related resources.
+	err = r.reconcileConfigMap(ctx, mdView)
 	if err != nil {
-		return res, err
+		return ctrl.Result{}, err
 	}
-
-	res, err = r.Reconcile_list(ctx, req)
+	err = r.reconcileDeployment(ctx, mdView)
 	if err != nil {
-		return res, err
+		return ctrl.Result{}, err
 	}
-
-	res, err = r.Reconcile_pagination(ctx, req)
+	err = r.reconcileService(ctx, mdView)
 	if err != nil {
-		return res, err
+		return ctrl.Result{}, err
 	}
 
-	res, err = r.Reconcile_patchMerge(ctx, req)
-	if err != nil {
-		return res, err
-	}
-
-	res, err = r.Reconcile_patchApply(ctx, req)
-	if err != nil {
-		return res, err
-	}
-
-	res, err = r.Reconcile_patchApplyConfig(ctx, req)
-	if err != nil {
-		return res, err
-	}
-
-	res, err = r.Reconcile_deleteWithPreConditions(ctx, req)
-	if err != nil {
-		return res, err
-	}
-
-	res, err = r.Reconcile_deleteAllOfDeployment(ctx, req)
-	if err != nil {
-		return res, err
-	}
-
-	return res, err
+	return r.updateStatus(ctx, mdView)
 }
 
 func (r *MarkdownViewReconciler) Reconcile_get(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
@@ -385,18 +364,20 @@ func (r *MarkdownViewReconciler) Reconcile_deleteAllOfDeployment(ctx context.Con
 	return ctrl.Result{}, err
 }
 
-func (r *MarkdownViewReconciler) updateStatus(ctx context.Context, req ctrl.Request) (ctrl.Result, error) {
-	var dep appsv1.Deployment
-	err := r.Get(ctx, client.ObjectKey{Namespace: "default", Name: "sample"}, &dep)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
+func (r *MarkdownViewReconciler) reconcileConfigMap(ctx context.Context, mdView viewv1.MarkdownView) error {
+	return nil
+}
 
-	// NOTE: Don't update deployment status in production. This is sample.
-	dep.Status.AvailableReplicas = 3
-	err = r.Status().Update(ctx, &dep)
+func (r *MarkdownViewReconciler) reconcileDeployment(ctx context.Context, mdView viewv1.MarkdownView) error {
+	return nil
+}
 
-	return ctrl.Result{}, err
+func (r *MarkdownViewReconciler) reconcileService(ctx context.Context, mdView viewv1.MarkdownView) error {
+	return nil
+}
+
+func (r *MarkdownViewReconciler) updateStatus(ctx context.Context, mdView viewv1.MarkdownView) (ctrl.Result, error) {
+	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
