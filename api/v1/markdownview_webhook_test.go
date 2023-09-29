@@ -17,6 +17,7 @@ import (
 func mutateTest(before string, after string) {
 	ctx := context.Background()
 
+	// Create a resource using 'before' file.
 	y, err := os.ReadFile(before)
 	Expect(err).NotTo(HaveOccurred())
 	d := yaml.NewYAMLOrJSONDecoder(bytes.NewReader(y), 4096)
@@ -27,10 +28,16 @@ func mutateTest(before string, after string) {
 	err = k8sClient.Create(ctx, beforeView)
 	Expect(err).NotTo(HaveOccurred())
 
+	// Get the resource.
 	ret := &MarkdownView{}
-	err = k8sClient.Get(ctx, types.NamespacedName{Name: beforeView.GetName(), Namespace: beforeView.GetNamespace()}, ret)
+	err = k8sClient.Get(
+		ctx,
+		types.NamespacedName{Name: beforeView.GetName(), Namespace: beforeView.GetNamespace()},
+		ret,
+	)
 	Expect(err).NotTo(HaveOccurred())
 
+	// Update the resource using 'after' file.
 	y, err = os.ReadFile(after)
 	Expect(err).NotTo(HaveOccurred())
 	d = yaml.NewYAMLOrJSONDecoder(bytes.NewReader(y), 4096)
@@ -38,10 +45,12 @@ func mutateTest(before string, after string) {
 	err = d.Decode(afterView)
 	Expect(err).NotTo(HaveOccurred())
 
+	// Assert that the resource contains the spec in 'after' file.
 	Expect(ret.Spec).Should(Equal(afterView.Spec))
 }
 
 func validateTest(file string, valid bool) {
+	// Create a resource using 'file' file.
 	ctx := context.Background()
 	y, err := os.ReadFile(file)
 	Expect(err).NotTo(HaveOccurred())
