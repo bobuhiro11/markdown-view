@@ -43,7 +43,9 @@ var _ webhook.Defaulter = &MarkdownView{}
 func (r *MarkdownView) Default() {
 	markdownviewlog.Info("default", "name", r.Name)
 
-	// TODO(user): fill in your defaulting logic.
+	if len(r.Spec.ViewerImage) == 0 {
+		r.Spec.ViewerImage = "peaceiris/mdbook:latest"
+	}
 }
 
 // TODO(user): change verbs to "verbs=create;update;delete" if you want to enable deletion validation.
