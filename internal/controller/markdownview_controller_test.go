@@ -24,12 +24,15 @@ var _ = Describe("MarkdownView controller", func() {
 	var stopFunc func()
 
 	BeforeEach(func() {
+		// Delete all MarkdownView, ConfigMap, Deployment in 'test' namespace.
 		err := k8sClient.DeleteAllOf(ctx, &viewv1.MarkdownView{}, client.InNamespace("test"))
 		Expect(err).NotTo(HaveOccurred())
 		err = k8sClient.DeleteAllOf(ctx, &corev1.ConfigMap{}, client.InNamespace("test"))
 		Expect(err).NotTo(HaveOccurred())
 		err = k8sClient.DeleteAllOf(ctx, &appsv1.Deployment{}, client.InNamespace("test"))
 		Expect(err).NotTo(HaveOccurred())
+
+		// Delete all Service in 'test' namespace.
 		svcs := &corev1.ServiceList{}
 		err = k8sClient.List(ctx, svcs, client.InNamespace("test"))
 		Expect(err).NotTo(HaveOccurred())
@@ -39,11 +42,13 @@ var _ = Describe("MarkdownView controller", func() {
 		}
 		time.Sleep(100 * time.Millisecond)
 
+		// Create manager.
 		mgr, err := ctrl.NewManager(cfg, ctrl.Options{
 			Scheme: scheme.Scheme,
 		})
 		Expect(err).ToNot(HaveOccurred())
 
+		// Create MarkdownViewReconciler.
 		reconciler := MarkdownViewReconciler{
 			Client: k8sClient,
 			Scheme: scheme.Scheme,
@@ -51,6 +56,8 @@ var _ = Describe("MarkdownView controller", func() {
 		err = reconciler.SetupWithManager(mgr)
 		Expect(err).NotTo(HaveOccurred())
 
+		// Start manager in an another goroutine.
+		// We can stop the manager by calling 'stopFunc'.
 		ctx, cancel := context.WithCancel(ctx)
 		stopFunc = cancel
 		go func() {
@@ -63,6 +70,7 @@ var _ = Describe("MarkdownView controller", func() {
 	})
 
 	AfterEach(func() {
+		// Stop manager.
 		stopFunc()
 		time.Sleep(100 * time.Millisecond)
 	})
@@ -89,7 +97,7 @@ var _ = Describe("MarkdownView controller", func() {
 		Eventually(func() error {
 			return k8sClient.Get(ctx, client.ObjectKey{Namespace: "test", Name: "viewer-sample"}, &dep)
 		}).Should(Succeed())
-		Expect(dep.Spec.Replicas).Should(Equal(pointer.Int32Ptr(3)))
+		Expect(dep.Spec.Replicas).Should(Equal(pointer.Int32(3)))
 		Expect(dep.Spec.Template.Spec.Containers[0].Image).Should(Equal("peaceiris/mdbook:0.4.10"))
 	})
 
@@ -129,6 +137,7 @@ var _ = Describe("MarkdownView controller", func() {
 	})
 })
 
+// Create an example MarkdownView resource.
 func newMarkdownView() *viewv1.MarkdownView {
 	return &viewv1.MarkdownView{
 		ObjectMeta: metav1.ObjectMeta{
