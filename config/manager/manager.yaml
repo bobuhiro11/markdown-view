@@ -28,7 +28,7 @@ spec:
   selector:
     matchLabels:
       control-plane: controller-manager
-  replicas: 1
+  replicas: 2
   template:
     metadata:
       annotations:
@@ -69,6 +69,7 @@ spec:
       - command:
         - /manager
         args:
+        # To deploy multiple custom controller pods.
         - --leader-elect
         image: controller:latest
         imagePullPolicy: IfNotPresent
