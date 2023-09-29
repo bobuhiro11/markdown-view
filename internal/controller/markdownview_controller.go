@@ -80,6 +80,7 @@ func (r *MarkdownViewReconciler) Reconcile(ctx context.Context, req ctrl.Request
 	// If the CR is not found, there is nothing to do here.
 	err := r.Get(ctx, req.NamespacedName, &mdView)
 	if errors.IsNotFound(err) {
+		r.removeMetrics(mdView)
 		return ctrl.Result{}, nil
 	}
 
@@ -600,6 +601,7 @@ func (r *MarkdownViewReconciler) updateStatus(ctx context.Context, mdView viewv1
 
 	if mdView.Status != status {
 		mdView.Status = status
+		r.setMetrics(mdView)
 		err = r.Status().Update(ctx, &mdView)
 		if err != nil {
 			return ctrl.Result{}, err
@@ -636,4 +638,27 @@ func controllerReference(mdView viewv1.MarkdownView, scheme *runtime.Scheme) (*m
 		WithBlockOwnerDeletion(true).
 		WithController(true)
 	return ref, nil
+}
+
+func (r *MarkdownViewReconciler) setMetrics(mdView viewv1.MarkdownView) {
+	switch mdView.Status {
+	case viewv1.MarkdownViewNotReady:
+		NotReadyVec.WithLabelValues(mdView.Name, mdView.Namespace).Set(1)
+		AvailableVec.WithLabelValues(mdView.Name, mdView.Namespace).Set(0)
+		HealthyVec.WithLabelValues(mdView.Name, mdView.Namespace).Set(0)
+	case viewv1.MarkdownViewAvailable:
+		NotReadyVec.WithLabelValues(mdView.Name, mdView.Namespace).Set(0)
+		AvailableVec.WithLabelValues(mdView.Name, mdView.Namespace).Set(1)
+		HealthyVec.WithLabelValues(mdView.Name, mdView.Namespace).Set(0)
+	case viewv1.MarkdownViewHealthy:
+		NotReadyVec.WithLabelValues(mdView.Name, mdView.Namespace).Set(0)
+		AvailableVec.WithLabelValues(mdView.Name, mdView.Namespace).Set(0)
+		HealthyVec.WithLabelValues(mdView.Name, mdView.Namespace).Set(1)
+	}
+}
+
+func (r *MarkdownViewReconciler) removeMetrics(mdView viewv1.MarkdownView) {
+	NotReadyVec.DeleteLabelValues(mdView.Name, mdView.Namespace)
+	AvailableVec.DeleteLabelValues(mdView.Name, mdView.Namespace)
+	HealthyVec.DeleteLabelValues(mdView.Name, mdView.Namespace)
 }
